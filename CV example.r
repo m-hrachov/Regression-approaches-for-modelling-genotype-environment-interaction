@@ -4,7 +4,7 @@
 # Corresponding author:
 # Prof. Hans-Peter Piepho, University of Hohenheim, piepho@uni-hohenheim.de
 # Code written by:
-# Maksym Hrachov, PhD student, maksym.hrachov@gmail.com
+# Maksym Hrachov, University of Hohenheim, PhD student, maksym.hrachov@gmail.com
 
 # THIS FILE IS NOT MEANT TO BE EXECUTED
 # BECAUSE THE DATASET USED IN THE PUBLICATION IS NOT FREELY AVAILABLE RIGHT NOW
