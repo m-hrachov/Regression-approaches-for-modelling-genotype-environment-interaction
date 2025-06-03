@@ -1,6 +1,5 @@
 # Dataset generation to illustrate models from the paper:
 # "Regression approaches for modelling genotype-environment interaction and making predictions into a target population of environments"
-# using simulated data.
 # 2025, University of Hohenheim
 # Corresponding author:
 # Prof. Hans-Peter Piepho, piepho@uni-hohenheim.de
