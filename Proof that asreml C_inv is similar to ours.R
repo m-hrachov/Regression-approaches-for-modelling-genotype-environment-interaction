@@ -225,7 +225,7 @@ asreml.options(maxit=20, extra=2, pworkspace="2gb", workspace="2gb", design = T)
 tic()
 
 # this is a dummy dataset that mimics real data
-load(file ="D:/bwSync/Outputs/03 BRRI/fork_v1/Proof that C_inv is fine/simulated_dataset.RData")
+load(file ="simulated_dataset_for_C_inv.RData")
 
 prep0 <- sim_dataset %>% 
   mutate(across(c("G", "Y", "L"), factor)) %>% 
@@ -613,4 +613,5 @@ vals <- abs(rel)
 mean(vals) 
 
 # Conclusion: looks fine.
+
 
