@@ -1,111 +1,138 @@
 # Be aware when working with small response values that this function can produce wrong results due to a rounding error
 # (i.e. I had a problem that ASREml-based C inverse had values 25 times larger. When the responce was multiplied by 10 and the variance adjusted, it produced a correct result)
 #4  
-get_C_inv <- function(model, variances, X = NULL, Z = NULL, G = NULL, 
-                        model_terms = "G+z1:G+z2:G", n_terms = 3, type = "us", G_rr = NULL, 
-                        fixed.effects = NULL){
-    
-    fixed.effects <- c("(Intercept)", fixed.effects) %>% rev(.) # ASReml as of 4.2.0 has reversed direction for the fixed effects in the design matrix
-    R <- diag(variances[!is.na(variances)])  # alphabetic order of L Y G
-    solve_R <- solve(R)
-    
-    if(is.null(Z)){
-      Z <- model$design[,!dimnames(model$design)[[2]] %in% fixed.effects]
-      NA_count <- 0
-      try(NA_count <- Z %>% as.matrix() %>% as.data.frame() %>%  select(starts_with("mv_")) %>% ncol())
-      if(NA_count != 0){
-        Z <- Z[!apply(Z, 1, function(row) any(row == -1)), ] %>% as.matrix() %>% as.data.frame() %>% select(-starts_with("mv_")) %>% as.matrix()
-      }
-      if(type == "rr"){
-        Z <- Z[!apply(Z, 1, function(row) any(row == -1)), ] %>% as.matrix() %>% as.data.frame() %>% select(-starts_with("mbf(Co)_x0")) %>% as.matrix()
-        
-      }
-    } else {stop("This function doesn't support custom Z. Under development.")}
-    
-    if( is.null(X)){
-      if(NA_count != 0){
-        X <- model$design[!apply(model$design, 1, function(row) any(row == -1)), ] %>% as.matrix() %>% as.data.frame() %>% 
-          select(-starts_with("mv_")) %>% 
-          select(all_of(fixed.effects)) %>% 
-          as.matrix()
-        
-      } else {
-        X <- model$design[,dimnames(model$design)[[2]] %in% fixed.effects]
-      }
-    } else {stop("This function doesn't support custom X. Under development.")}
-    
-    G_l <- diag(rep(model$G.param$L$variance$initial,model$G.param$L$variance$size))
-    G_y <- diag(rep(model$G.param$Y$variance$initial,model$G.param$Y$variance$size))
-    if(type == "us"){
-      if(n_terms == 1){
-        G_us <- diag(rep(model$G.param[[model_terms]]$variance$initial[1],model$G.param[[model_terms]]$variance$size))
-      } else if(n_terms == 2){
-        G_g <- diag(rep(model$G.param[[model_terms]][[paste(n_terms)]]$initial[1],model$G.param[[model_terms]]$variance$size/n_terms))
-        G_z1 <- diag(rep(model$G.param[[model_terms]][[paste(n_terms)]]$initial[3],model$G.param[[model_terms]]$variance$size/n_terms))
-        G_gz1 <- diag(rep(model$G.param[[model_terms]][[paste(n_terms)]]$initial[2],(model$G.param[[model_terms]]$variance$size/n_terms)))
-        G_us <- cbind(rbind(G_g, G_gz1), rbind(G_gz1, G_z1)) 
-      } else if(n_terms == 3){
-        G_g <- diag(rep(model$G.param[[model_terms]][[paste(n_terms)]]$initial[1],model$G.param[[model_terms]]$variance$size/n_terms))
-        G_z1 <- diag(rep(model$G.param[[model_terms]][[paste(n_terms)]]$initial[3],model$G.param[[model_terms]]$variance$size/n_terms))
-        G_z2 <- diag(rep(model$G.param[[model_terms]][[paste(n_terms)]]$initial[6],model$G.param[[model_terms]]$variance$size/n_terms))
-        G_gz1 <- diag(rep(model$G.param[[model_terms]][[paste(n_terms)]]$initial[2],(model$G.param[[model_terms]]$variance$size/n_terms)))
-        G_gz2 <- diag(rep(model$G.param[[model_terms]][[paste(n_terms)]]$initial[4],(model$G.param[[model_terms]]$variance$size/n_terms)))
-        G_z1z2 <- diag(rep(model$G.param[[model_terms]][[paste(n_terms)]]$initial[5],(model$G.param[[model_terms]]$variance$size/n_terms)))
-        
-        G_us <-  cbind(rbind(G_g, G_gz1), rbind(G_gz1, G_z1)) %>% rbind(., cbind(G_gz2,G_z1z2)) %>% cbind(. ,rbind(rbind(G_gz2, G_z1z2), G_z2))
-        
-      } else {stop("Can't adjust US structure to more than 2 covariates.")}
-    } else if (type == "rr"){
+get_C_inv <- function(model, variances, X = NULL, Z = NULL, G = NULL, num_G = NULL,
+                      model_terms = "G+z1:G+z2:G", n_terms = 3, type = "us", G_rr = NULL,
+                      fixed.effects = NULL){
+  
+  if(is.null(num_G)){ num_G = model$G.param[[model_terms]]$variance$size/n_terms }
+  X = NULL 
+  Z = NULL
+  
+  fixed.effects <- c("(Intercept)", fixed.effects) %>% rev(.) # ASReml as of 4.2.0 has reversed direction for the fixed effects in the design matrix
+  R <- diag(variances[!is.na(variances)]) 
+  solve_R <- solve(R)
+  
+  if(is.null(Z)){
+    Z <- model$design[,!dimnames(model$design)[[2]] %in% fixed.effects]
+    NA_count <- 0
+    try(NA_count <- Z %>% as.matrix() %>% as.data.frame() %>%  select(starts_with("mv_")) %>% ncol())
+    if(NA_count != 0){
+      Z <- Z[!apply(Z, 1, function(row) any(row == -1)), ] %>% as.matrix() %>% as.data.frame() %>% select(-starts_with("mv_")) %>% as.matrix()
+    }
+    if(type == "rr"){
+      Z <- Z[!apply(Z, 1, function(row) any(row == -1)), ] %>% as.matrix() %>% as.data.frame() %>% select(-starts_with("mbf(Co)_x0")) %>% as.matrix()
       
-      G_covariates <- as.matrix(expand_G(G_rr, model$G.param[[model_terms]]$variance$size/n_terms))
+    }
+  } else {stop("This function doesn't support custom Z. Under development.")}
+  
+  if( is.null(X)){
+    if(NA_count != 0){
+      X <- model$design[!apply(model$design, 1, function(row) any(row == -1)), ] %>% as.matrix() %>% as.data.frame() %>% 
+        select(-starts_with("mv_")) %>% 
+        select(all_of(fixed.effects)) %>% 
+        as.matrix()
       
     } else {
-      stop("Only unstructured and reduced rank variance-covariance are supported")
+      X <- model$design[,dimnames(model$design)[[2]] %in% fixed.effects]
     }
-    G_yl <- diag(rep(model$G.param$`Y:L`$variance$initial,model$G.param$`Y:L`$variance$size))
-    G_lg <- diag(rep(model$G.param$`L:G`$variance$initial,model$G.param$`L:G`$variance$size))
-    G_yg <- diag(rep(model$G.param$`Y:G`$variance$initial,model$G.param$`Y:G`$variance$size))
+  } else {stop("This function doesn't support custom X. Under development.")}
+  
+  G_l <- diag(rep(model$G.param$L$variance$initial,model$G.param$L$variance$size))
+  G_y <- diag(rep(model$G.param$Y$variance$initial,model$G.param$Y$variance$size))
+  if(type == "us"){
+    us_estimates_df <- model$G.param[[model_terms]][[paste(n_terms)]]$initial %>% 
+      data.frame(.) %>% 
+      tibble::rownames_to_column(., "component") %>% 
+      rename(value = ".") %>% 
+      separate(component, into = c("part1", "part2"), sep = "_", remove = TRUE) %>%
+      separate(part2, into = c("row", "column"), sep = ":", remove = TRUE) %>% 
+      select(-part1) %>% 
+      mutate(across(all_of(c("row","column")), ~as.numeric(.)))
     
-    G_ylg <- diag(rep(model$G.param$`Y:L:G`$variance$initial,model$G.param$`Y:L:G`$variance$size))
-    if(type == "us"){
-      G <- bdiag(G_l, G_y, G_us, G_yl, G_lg, G_yg, G_ylg)
-    } else if(type == "rr"){
-      G <- bdiag(G_l, G_y, G_yl, G_lg, G_yg, G_covariates, G_ylg)
+    us_dense_var_mat <- matrix(rep(NA, n_terms^2), ncol = n_terms)
+    for (i in 1:nrow(us_estimates_df)){
+      us_dense_var_mat[us_estimates_df$row[i], us_estimates_df$column[i]] <- us_estimates_df$value[i]
     }
+    us_dense_var_mat[upper.tri(us_dense_var_mat)] <- t(us_dense_var_mat)[upper.tri(us_dense_var_mat)]
     
-    try(C_11  <-  t(X) %*% solve_R %*% X, silent = TRUE)
-    try(C_21  <-  t(Z) %*% solve_R %*% X, silent = TRUE)
-    try(C_12  <-  t(X) %*% solve_R %*% Z, silent = TRUE)
-    try(C_22  <-  t(Z) %*% solve_R %*% Z + solve(G), silent = TRUE)
+    G_g_and_cov <- as.matrix(expand_G(us_dense_var_mat, num_G))
     
-    try(C_1 <- cbind(C_11,C_12), silent = TRUE)
-    try(C_2 <- cbind(C_21,C_22), silent = TRUE)
+  } else if (type == "rr"){
     
-    try(C <- rbind(C_1, C_2), silent = TRUE)
+    G_g_and_cov <- as.matrix(expand_G(G_rr, num_G))
     
-    try( C_inv <- solve(as.matrix(C)), silent = TRUE)
-    # in case the above method fails, use the one from Henderson, "Application of linear models in animal breeding" (1984)
-    if(exists("C_inv")){
-      if(any(is.na(C_inv))){
-        print("C_inv produced NA! Alternative derivation is used. Check the inputs if the alternative fails.")
-        M_11 = t(X) %*% solve_R %*% X
-        M_21 = G %*% t(Z) %*% solve_R %*% X
-        M_12 = t(X) %*% solve_R %*% Z %*% G
-        M_22 = G %*% t(Z) %*% solve_R %*% Z %*% G + G
-        
-        M_1 <- cbind(M_11,M_12)
-        M_2 <- cbind(M_21,M_22)
-        
-        M <- rbind(M_1, M_2)
-        M_inv <- MASS::ginv(as.matrix(M))
-        
-        C_inv <- bdiag(diag(rep(1, length(fixed.effects))), G) %*% M_inv %*% bdiag(diag(rep(1, length(fixed.effects))), G)
-        colnames(C_inv) <- c(fixed.effects, colnames(Z))
-        rownames(C_inv) <- c(fixed.effects, colnames(Z))
-      } 
-    } else {
-      print("Standard derivation failed. Alternative derivation of C is used.")
-      ### if G is singular
+  } else if(type == "id"){
+    var_G <- model$G.param[[model_terms]][["variance"]]$initial %>% 
+      as.matrix(.) 
+    G_g_and_cov <- as.matrix(expand_G(var_G, num_G))
+  }  else {
+    stop("Only unstructured and reduced rank variance-covariance are supported")
+  }
+  G_yl <- diag(rep(model$G.param$`Y:L`$variance$initial,model$G.param$`Y:L`$variance$size))
+  G_lg <- diag(rep(model$G.param$`L:G`$variance$initial,model$G.param$`L:G`$variance$size))
+  G_yg <- diag(rep(model$G.param$`Y:G`$variance$initial,model$G.param$`Y:G`$variance$size))
+  
+  G_ylg <- diag(rep(model$G.param$`Y:L:G`$variance$initial,model$G.param$`Y:L:G`$variance$size))
+  
+  tag_component <- function(nm) {
+    nm <- trimws(nm)
+    if (nm == "L")              return("G_l")
+    if (grepl("^mbf\\(", nm))   return("G_g_and_cov")
+    if (grepl("^z\\d+", nm))    return("G_g_and_cov")
+    if (grepl("^G\\+z\\d+", nm)) return("G_g_and_cov")
+    if (grepl("^G$", nm))       return("G_g_and_cov")
+    if (nm == "Y")              return("G_y")
+    if (nm == "L:G")            return("G_lg")
+    if (nm == "Y:G")            return("G_yg")
+    if (nm == "Y:L")            return("G_yl")
+    if (nm == "Y:L:G")          return("G_ylg")
+    if (nm == "units!R")        return(NA_character_) # residual, not in G
+    NA_character_
+  }
+  
+  # 2) Determine the block order from first occurrence in vparameters
+  vp_names <- names(model$vparameters)
+  block_order <- vp_names %>% 
+    map_chr(tag_component)  %>% 
+    discard(is.na)  %>% 
+    {\(x) x[!duplicated(x)]}()
+  
+  # 3) List your candidate G blocks (some may be NULL/absent)
+  blocks <- list(
+    G_l = G_l,
+    G_g_and_cov = G_g_and_cov,
+    G_y = G_y,
+    G_lg = G_lg,
+    G_yg = G_yg,
+    G_yl = G_yl,
+    G_ylg = G_ylg
+  )
+  
+  # 4) Keep only blocks that exist and are in the detected order
+  blocks_ordered <- blocks[intersect(block_order, names(blocks))]
+  blocks_ordered <- blocks_ordered[!vapply(blocks_ordered, is.null, logical(1))]
+  
+  # 5) Build bdiag in the dynamic order
+  G <- do.call(bdiag, blocks_ordered)
+  message("Detected order from vparameters: ",
+          paste(block_order, collapse = ", "))
+
+  try(C_11  <-  t(X) %*% solve_R %*% X, silent = TRUE)
+  try(C_21  <-  t(Z) %*% solve_R %*% X, silent = TRUE)
+  try(C_12  <-  t(X) %*% solve_R %*% Z, silent = TRUE)
+  try(C_22  <-  t(Z) %*% solve_R %*% Z + solve(G), silent = TRUE)
+  
+  try(C_1 <- cbind(C_11,C_12), silent = TRUE)
+  try(C_2 <- cbind(C_21,C_22), silent = TRUE)
+  
+  try(C <- rbind(C_1, C_2), silent = TRUE)
+  
+  try( C_inv <- solve(as.matrix(C)), silent = TRUE)
+  
+  if(exists("C_inv")){
+    if(any(is.na(C_inv))){
+      print("C_inv produced NA! Alternative derivation is used. Check the inputs if the alternative fails.")
       M_11 = t(X) %*% solve_R %*% X
       M_21 = G %*% t(Z) %*% solve_R %*% X
       M_12 = t(X) %*% solve_R %*% Z %*% G
@@ -120,8 +147,26 @@ get_C_inv <- function(model, variances, X = NULL, Z = NULL, G = NULL,
       C_inv <- bdiag(diag(rep(1, length(fixed.effects))), G) %*% M_inv %*% bdiag(diag(rep(1, length(fixed.effects))), G)
       colnames(C_inv) <- c(fixed.effects, colnames(Z))
       rownames(C_inv) <- c(fixed.effects, colnames(Z))
-    }
- 
+    } 
+  } else {
+    print("Standard derivation failed. Alternative derivation of C is used.")
+    ### if G is singular
+    M_11 = t(X) %*% solve_R %*% X
+    M_21 = G %*% t(Z) %*% solve_R %*% X
+    M_12 = t(X) %*% solve_R %*% Z %*% G
+    M_22 = G %*% t(Z) %*% solve_R %*% Z %*% G + G
+    
+    M_1 <- cbind(M_11,M_12)
+    M_2 <- cbind(M_21,M_22)
+    
+    M <- rbind(M_1, M_2)
+    M_inv <- MASS::ginv(as.matrix(M))
+    
+    C_inv <- bdiag(diag(rep(1, length(fixed.effects))), G) %*% M_inv %*% bdiag(diag(rep(1, length(fixed.effects))), G)
+    colnames(C_inv) <- c(fixed.effects, colnames(Z))
+    rownames(C_inv) <- c(fixed.effects, colnames(Z))
+  }
+
   return(C_inv)
   
 }
@@ -335,3 +380,4 @@ get_sigma_x_prime <- function(multivar, year = "Y", variables = c("z1", "z2"), r
 #   return(est.var_gamma_prime_xi_prime)
 # }
 # 
+
